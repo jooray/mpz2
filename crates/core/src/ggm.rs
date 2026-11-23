@@ -90,20 +90,37 @@ impl<'a> GgmTree<'a> {
         let path = idx.iter_msb0().skip(32 - depth);
 
         // Recovers the value of the sibling node.
+        //
+        // `offset` and `select` come from the secret index: the pair at
+        // `offset` is cleared and written with masked passes over the whole
+        // layer, and both parities are folded, so that no branch, load or
+        // store depends on them.
         fn recover(layer: &mut [Block], sum: Block, offset: usize, select: bool) {
-            layer[offset + select as usize] = Block::ZERO;
-            layer[offset + !select as usize] = Block::ZERO;
+            let pair = offset >> 1;
 
-            // If `select` is a left node, we fold all the right nodes and vice
-            // versa.
-            let value = layer
-                .iter()
-                .skip(!select as usize)
-                .step_by(2)
-                .fold(sum, |acc, value| acc ^ value);
+            // Clear the pair at `offset` and fold the even and the odd nodes.
+            let mut even = sum;
+            let mut odd = sum;
+            for (j, nodes) in layer.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+                let keep = Block::ONES ^ Block::mask_eq(j, pair);
+                nodes[0] = nodes[0] & keep;
+                nodes[1] = nodes[1] & keep;
+                even ^= nodes[0];
+                odd ^= nodes[1];
+            }
+
+            // If `select` is a left node, the sibling is the right one and its
+            // value is the fold of all the right nodes, and vice versa.
+            let value = Block::select(odd, even, select);
+            let left = Block::mask(select) & value;
+            let right = Block::mask(!select) & value;
 
             // Set the value of the sibling.
-            layer[offset + !select as usize] = value;
+            for (j, nodes) in layer.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+                let here = Block::mask_eq(j, pair);
+                nodes[0] ^= here & left;
+                nodes[1] ^= here & right;
+            }
         }
 
         // An offset in a layer of either the node in the path or its sibling.

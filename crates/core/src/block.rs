@@ -142,6 +142,45 @@ impl Block {
         (self.0[0] & 1) == 1
     }
 
+    /// Returns [`Block::ONES`] if `bit` is set and [`Block::ZERO`] otherwise,
+    /// computed without a branch or a table lookup on `bit`.
+    ///
+    /// The mask byte passes through [`core::hint::black_box`] so that the
+    /// optimizer does not turn the masked arithmetic it feeds back into a
+    /// branch on `bit`.
+    #[inline(always)]
+    pub fn mask(bit: bool) -> Self {
+        let m = core::hint::black_box((bit as u8).wrapping_neg());
+        Self([m; 16])
+    }
+
+    /// Returns [`Block::ONES`] if `a == b` and [`Block::ZERO`] otherwise,
+    /// computed without a branch on either value.
+    #[inline(always)]
+    pub fn mask_eq(a: usize, b: usize) -> Self {
+        let d = a ^ b;
+        // The top bit of `d | -d` is set iff `d != 0`.
+        let ne = ((d | d.wrapping_neg()) >> (usize::BITS - 1)) as u8;
+        let m = core::hint::black_box((ne ^ 1).wrapping_neg());
+        Self([m; 16])
+    }
+
+    /// Returns `b` if `choice` is set and `a` otherwise, computed without a
+    /// branch on `choice`.
+    #[inline(always)]
+    pub fn select(a: Self, b: Self, choice: bool) -> Self {
+        a ^ (Self::mask(choice) & (a ^ b))
+    }
+
+    /// Returns [`Block::ONE`] if `bit` is set and [`Block::ZERO`] otherwise,
+    /// computed without a branch on `bit`.
+    #[inline(always)]
+    pub fn from_bit(bit: bool) -> Self {
+        let mut out = Self::ZERO;
+        out.0[0] = bit as u8;
+        out
+    }
+
     /// Let `x0` and `x1` be the lower and higher halves of `x`, respectively.
     /// This function compute ``sigma( x = x0 || x1 ) = x1 || (x0 xor x1)``.
     #[inline(always)]
@@ -463,6 +502,39 @@ mod tests {
     use itybity::ToBits;
 
     use super::*;
+
+    #[test]
+    fn test_masked_selects() {
+        assert_eq!(Block::mask(false), Block::ZERO);
+        assert_eq!(Block::mask(true), Block::ONES);
+        assert_eq!(Block::from_bit(false), Block::ZERO);
+        assert_eq!(Block::from_bit(true), Block::ONE);
+
+        let mut rng = rand::rng();
+        let a: Block = rng.random();
+        let b: Block = rng.random();
+        assert_eq!(Block::select(a, b, false), a);
+        assert_eq!(Block::select(a, b, true), b);
+
+        let values = [
+            0usize,
+            1,
+            2,
+            3,
+            7,
+            8,
+            255,
+            1 << 20,
+            usize::MAX - 1,
+            usize::MAX,
+        ];
+        for &x in &values {
+            for &y in &values {
+                let expected = if x == y { Block::ONES } else { Block::ZERO };
+                assert_eq!(Block::mask_eq(x, y), expected, "{x} {y}");
+            }
+        }
+    }
 
     #[test]
     fn test_set_lsb() {
