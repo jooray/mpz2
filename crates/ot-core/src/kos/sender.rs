@@ -148,14 +148,13 @@ impl Sender<state::Extension> {
         }
 
         // Figure 3, step 4.
-        let zero = vec![0u8; row_width];
         iter.for_each(|(((b, rng), q), u)| {
             // Reuse `q` to avoid memory allocation for tⁱ_∆ᵢ
             rng.fill_bytes(q);
             // If `b` (i.e. ∆ᵢ) is true, xor `u` into `q`, otherwise xor 0 into
-            // `q` (constant time).
-            let u = if b { u } else { &zero };
-            q.iter_mut().zip(u).for_each(|(q, u)| *q ^= u);
+            // `q`. `b` is secret: mask, do not branch.
+            let m = core::hint::black_box((b as u8).wrapping_neg());
+            q.iter_mut().zip(u).for_each(|(q, u)| *q ^= u & m);
         });
 
         // Extend existing rows.
@@ -242,11 +241,15 @@ impl Sender<state::Extension> {
 
         let Check { x, t } = receiver_check;
 
+        // The bits of ∆ are secret: select with a mask, and accumulate the
+        // differences so that the check does not stop at the first mismatch.
+        let mut diff = 0u128;
         for ((bit, t), q) in self.delta.iter_lsb0().zip(t).zip(check_q) {
-            let x = if bit { x } else { Block::ZERO };
-            if q != t ^ x {
-                return Err(SenderError::ConsistencyCheckFailed);
-            }
+            let x = Block::mask(bit) & x;
+            diff |= u128::from_le_bytes((q ^ t ^ x).to_bytes());
+        }
+        if diff != 0 {
+            return Err(SenderError::ConsistencyCheckFailed);
         }
 
         // Figure 10, "Transpose and randomize".

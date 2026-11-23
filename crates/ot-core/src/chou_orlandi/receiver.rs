@@ -19,6 +19,7 @@ use curve25519_dalek::{
 };
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
+use subtle::{Choice, ConditionallySelectable};
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
@@ -141,15 +142,10 @@ impl Receiver<state::Setup> {
             ));
         }
 
-        let mut msgs =
-            decryption_keys
-                .drain(..payload.len())
-                .zip(payload)
-                .map(
-                    |((c, key), [ct0, ct1])| {
-                        if c { key ^ ct1 } else { key ^ ct0 }
-                    },
-                );
+        let mut msgs = decryption_keys.drain(..payload.len()).zip(payload).map(
+            // `c` is secret: select with a mask, not a branch.
+            |((c, key), [ct0, ct1])| key ^ Block::select(ct0, ct1, c),
+        );
 
         while let Some(Queued { count, sender }) = self.queue.pop_front() {
             let output = OTReceiverOutput {
@@ -223,11 +219,9 @@ fn compute_decryption_keys(
         // if c = 1: B = A * g ^ b
         //
         // when choice is 0, we add the zero element to keep constant time.
-        let blinded_choice = if c {
-            a + b * RISTRETTO_BASEPOINT_TABLE
-        } else {
-            zero + b * RISTRETTO_BASEPOINT_TABLE
-        };
+        // `c` is secret: select the point without a branch.
+        let blinded_choice = RistrettoPoint::conditional_select(&zero, &a, Choice::from(c as u8))
+            + b * RISTRETTO_BASEPOINT_TABLE;
 
         let decryption_key = hash_point(&(b * base_table), (offset + i) as u128);
 

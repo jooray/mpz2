@@ -132,7 +132,9 @@ impl MPCOTReceiver<state::Initialized> {
 
                 let log2_len = k.ilog2() as usize;
                 let spcot_log2_lengths = (0..count).map(|_| log2_len).collect();
-                let idxs = idxs.iter().map(|&idx| idx % k).collect();
+                // `k` is a power of two; a mask instead of a division keeps
+                // the secret indices out of a variable-time instruction.
+                let idxs = idxs.iter().map(|&idx| idx & (k - 1)).collect();
 
                 (Extension::Regular { len }, spcot_log2_lengths, idxs)
             }

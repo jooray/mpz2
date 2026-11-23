@@ -90,6 +90,7 @@ aes = "0.9"
 ctr = "0.10"
 curve25519-dalek = "5.0.0-pre.6"
 p256 = "0.13"
+subtle = "2.6"
 ghash_rc = { package = "ghash", version = "0.6" }
 crypto-bigint = { version = "0.7", default-features = false, features = ["rand_core", "hybrid-array"] }
 keccak = "0.2"

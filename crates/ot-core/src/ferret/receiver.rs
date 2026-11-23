@@ -6,7 +6,7 @@ use tokio::sync::{Mutex, OwnedMutexGuard};
 use mpz_common::future::{MaybeDone, Sender as OutputSender, new_output};
 use mpz_core::{
     Block,
-    lpn::{LpnEncoder, LpnParameters, sample_error_indices},
+    lpn::{LpnEncoder, LpnParameters, LpnType, sample_error_indices},
     prg::Prg,
 };
 
@@ -246,13 +246,32 @@ where
         self.macs.truncate(self.macs.len() - params.k);
 
         // Compute x = A * u + e.
+        // The choices and the error positions are secret: no branch on the
+        // choices, and for regular LPN, where each position lies in its own
+        // interval, a masked pass over the interval instead of an indexed
+        // store.
         let u: Vec<_> = self.choices[self.choices.len() - params.k..]
             .iter()
-            .map(|x| if *x { Block::ONE } else { Block::ZERO })
+            .map(|x| Block::from_bit(*x))
             .collect();
         let mut x = vec![Block::ZERO; params.n];
-        for &idx in &err {
-            x[idx] = Block::ONE;
+        match self.config.lpn_type() {
+            LpnType::Regular => {
+                let step = params.n / params.t;
+                // `sample_error_indices` puts the i-th position in the i-th
+                // interval of length `step`.
+                for (i, (interval, &idx)) in x.chunks_exact_mut(step).zip(&err).enumerate() {
+                    let start = i * step;
+                    for (j, x) in interval.iter_mut().enumerate() {
+                        *x ^= Block::mask_eq(start + j, idx) & Block::ONE;
+                    }
+                }
+            }
+            LpnType::Uniform => {
+                for &idx in &err {
+                    x[idx] = Block::ONE;
+                }
+            }
         }
 
         encoder.compute(lpn_seed, &mut x, &u);

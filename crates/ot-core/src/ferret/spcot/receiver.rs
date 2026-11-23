@@ -156,11 +156,8 @@ impl SPCOTReceiver {
             .enumerate()
             .map(|(i, (([m0, m1], &t), b))| {
                 let tweak = Block::from((self.counter + i as u128).to_be_bytes());
-                if !b {
-                    cipher.tccr(tweak, t) ^ m1
-                } else {
-                    cipher.tccr(tweak, t) ^ m0
-                }
+                // `b` is a bit of a secret index: select without a branch.
+                cipher.tccr(tweak, t) ^ Block::select(*m1, *m0, b)
             })
             .collect();
 
@@ -190,7 +187,13 @@ impl SPCOTReceiver {
             .for_each(|((((w, sums), sum), &length), &idx)| {
                 GgmTree::new_partial(length, sums, idx, w);
 
-                w[idx] = w.iter().fold(*sum, |acc, &x| acc ^ x);
+                // `idx` is secret: write the punctured leaf with a full
+                // masked pass instead of an indexed store.
+                let value = w.iter().fold(*sum, |acc, &x| acc ^ x);
+                for (j, x) in w.iter_mut().enumerate() {
+                    let m = Block::mask_eq(j, idx);
+                    *x ^= m & (*x ^ value);
+                }
             });
 
         self.transcript.update(Block::array_as_flattened_bytes(ms));
@@ -229,10 +232,15 @@ impl SPCOTReceiver {
         let mut chis = vec![Block::ZERO; self.ws.len()];
         prg.random_blocks(&mut chis);
 
+        // The indices are secret: read `chis[i + idx]` with a masked pass
+        // over the whole SPCOT vector instead of an indexed load.
         let mut i = 0;
-        for (length, idx) in self.lengths.iter().zip(&self.indices) {
-            sum_chi_alpha ^= chis[i + idx];
-            i += 1 << length;
+        for (length, &idx) in self.lengths.iter().zip(&self.indices) {
+            let len = 1 << length;
+            for (j, chi) in chis[i..i + len].iter().enumerate() {
+                sum_chi_alpha ^= Block::mask_eq(j, idx) & *chi;
+            }
+            i += len;
         }
 
         let x_prime = BitVec::from_iter(

@@ -29,6 +29,7 @@ rand_core.workspace = true
 rand_chacha.workspace = true
 rayon = { workspace = true, optional = true }
 curve25519-dalek = { workspace = true, features = ["serde", "rand_core"] }
+subtle.workspace = true
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 derive_builder.workspace = true

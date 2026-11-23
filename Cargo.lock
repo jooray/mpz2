@@ -1776,6 +1776,7 @@ dependencies = [
  "rayon",
  "rstest",
  "serde",
+ "subtle",
  "thiserror",
  "tokio",
  "zerocopy",
