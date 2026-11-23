@@ -117,6 +117,11 @@ impl Field for Gf2 {
     fn one() -> Self {
         Gf2::ONE
     }
+
+    fn from_bit(bit: bool) -> Self {
+        Gf2(bit)
+    }
+
     fn two_pow(rhs: u32) -> Self {
         // In GF(2), 2 = 0, so 2^0 = 1 and 2^k = 0 for k ≥ 1.
         Gf2(rhs == 0)

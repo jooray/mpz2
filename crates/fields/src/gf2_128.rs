@@ -137,6 +137,10 @@ impl Field for Gf2_128 {
         Self::new(1)
     }
 
+    fn from_bit(bit: bool) -> Self {
+        Self::new(bit as u128)
+    }
+
     fn two_pow(rhs: u32) -> Self {
         Self(1 << rhs)
     }

@@ -3,7 +3,8 @@
 use std::ops::{Add, Mul, Neg, Sub};
 
 use crypto_bigint::{
-    ArrayEncoding, NonZero, RandomMod, U256, const_monty_params,
+    ArrayEncoding, Choice, NonZero, RandomMod, U256, const_monty_params,
+    ctutils::CtSelect,
     modular::{ConstMontyForm, ConstMontyParams},
 };
 use hybrid_array::Array;
@@ -129,6 +130,10 @@ impl Field for P256 {
 
     fn one() -> Self {
         P256(Fq::ONE)
+    }
+
+    fn from_bit(bit: bool) -> Self {
+        P256(Fq::ZERO.ct_select(&Fq::ONE, Choice::from_u8_lsb(bit as u8)))
     }
 
     fn two_pow(rhs: u32) -> Self {

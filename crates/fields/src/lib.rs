@@ -80,6 +80,10 @@ pub trait Field:
     /// Return a field element from a power of two.
     fn two_pow(rhs: u32) -> Self;
 
+    /// Return `one()` if `bit` is set and `zero()` otherwise, without a
+    /// branch on `bit`.
+    fn from_bit(bit: bool) -> Self;
+
     /// Return the multiplicative inverse, returning `None` if the element is
     /// zero.
     fn inverse(self) -> Option<Self>;

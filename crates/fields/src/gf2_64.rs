@@ -118,6 +118,10 @@ impl Field for Gf2_64 {
         Gf2_64::ONE
     }
 
+    fn from_bit(bit: bool) -> Self {
+        Gf2_64(bit as u64)
+    }
+
     fn two_pow(rhs: u32) -> Self {
         Gf2_64(1u64 << rhs)
     }

@@ -132,7 +132,8 @@ where
             (F::zero(), F::zero()),
             |(add, mul), (i, ((&delta, &u), &t))| {
                 let two_pow_i = F::two_pow(i as u32);
-                let delta = if delta { F::one() } else { F::zero() };
+                // `delta` is a secret share bit: no branch on it.
+                let delta = F::from_bit(delta);
                 (add + two_pow_i * (delta * u + t), mul + two_pow_i * delta)
             },
         );
