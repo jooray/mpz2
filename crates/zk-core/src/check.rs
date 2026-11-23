@@ -76,8 +76,10 @@ impl Check {
             let u = x.gfmul(y).gfmul(chi);
 
             // (Note that the LSB of a MAC contains the authenticated bit).
-            let a_10 = if x.lsb() { y } else { Block::ZERO };
-            let a_11 = if y.lsb() { x } else { Block::ZERO };
+            //
+            // The bits are secret: select with masks, not branches.
+            let a_10 = Block::mask(x.lsb()) & y;
+            let a_11 = Block::mask(y.lsb()) & x;
             let v = (a_10 ^ a_11 ^ z).gfmul(chi);
 
             (u, v)
